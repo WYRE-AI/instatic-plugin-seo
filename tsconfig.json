@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": ["bun", "react"],
+    "paths": {
+      "@instatic/plugin-sdk": ["./.instatic/src/core/plugin-sdk/index.ts"],
+      "@instatic/host-ui": ["./.instatic/src/admin/plugin-host-ui/index.ts"],
+      "@instatic/host-hooks": ["./.instatic/src/admin/plugin-host-hooks/index.ts"],
+      "@core/*": ["./.instatic/src/core/*"],
+      "@modules/*": ["./.instatic/src/modules/*"],
+      "@ui/*": ["./.instatic/src/ui/*"],
+      "@admin/*": ["./.instatic/src/admin/*"],
+      "@site/*": ["./.instatic/src/admin/pages/site/*"],
+      "@content/*": ["./.instatic/src/admin/pages/content/*"],
+      "@plugins/*": ["./.instatic/src/admin/pages/plugins/*"],
+      "@users/*": ["./.instatic/src/admin/pages/users/*"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.tsx"],
+  "exclude": ["dist", "node_modules", ".instatic"]
+}

@@ -1,0 +1,14 @@
+# Vendored Instatic checkout — created by `bun run setup`.
+# The plugin SDK is not published to npm, so building needs a local copy.
+.instatic/
+
+# Build output
+dist/
+*.plugin.zip
+
+# Dependencies
+node_modules/
+
+# Editor / OS
+.DS_Store
+*.log
