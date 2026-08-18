@@ -281,8 +281,12 @@ decorative.
   in a **single pass** over one alternation so `&amp;lt;` decodes to the visible text
   `&lt;` and stops rather than being carried the rest of the way to `<`. Unknown names,
   code points past the end of Unicode, and lone surrogates are left as written.
-  `test/host-roundtrip.test.ts` asserts this against the host's own `escapeHtml` rather
-  than a hand-written fixture — a fixture is what let an over-encoding bug ship.
+  `test/host-roundtrip.test.ts` builds its fixtures by *running the host's own*
+  `escapeHtml` and requires the original string back, rather than hand-writing the
+  expected encoding — hand-writing it is what let an over-encoding bug ship. The host
+  function is copied into the test file (`.instatic/` is gitignored, so a clean clone has
+  no host source), and a drift guard compares the copy against the vendored checkout
+  character by character whenever that checkout is present.
 - JSON-LD is serialised with `<`, `>`, and `&` escaped as `\uXXXX`. `JSON.stringify` alone
   is **not** sufficient: inside a script element the HTML tokeniser scans for the literal
   `</script` sequence regardless of JSON syntax, so a `</script>` in author text would
