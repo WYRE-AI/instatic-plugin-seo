@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Apostrophes in a page title or description were published double-encoded.
+  The host escapes `'` to the hexadecimal `&#x27;`, but `decodeHtmlEntities`
+  knew only the decimal `&#39;`, so the apostrophe survived decoding and the
+  stray `&` was escaped again — `Ada's Guide` shipped as `Ada&amp;#x27;s Guide`
+  and rendered literally as `Ada&#x27;s Guide`. This affected `og:title`,
+  `twitter:title`, `og:description`, `twitter:description`, the meta
+  description, and the JSON-LD `headline` on every page whose title or
+  description contained an apostrophe. Over-escaping is the safe direction —
+  it was never an injection risk — but it corrupted the exact tags this plugin
+  exists to produce.
+- `decodeHtmlEntities` now decodes numeric character references generically
+  (decimal `&#N;` and hexadecimal `&#xN;`, with or without leading zeros) in a
+  single pass over one alternation, so the next character added to the host's
+  escape map cannot reproduce this class of bug. The single pass is
+  load-bearing: a chain of `.replace()` calls decodes `&amp;lt;` all the way to
+  `<`, silently un-escaping markup an author typed as visible text.
+  Unrecognised names, code points past the end of Unicode, and lone surrogates
+  are left exactly as written.
+- `injectSeoHead` no longer strips the host's `<meta name="description">` when
+  the document has no `</head>` to insert a replacement into. The page kept
+  losing its description and gaining nothing.
+
+### Changed
+
+- README no longer claims the plugin is byte-identical on pages with no
+  metadata. It is not, and cannot be: `og:title` and `twitter:title` fall back
+  to the page's own `<title>`, so installing the plugin adds a block to every
+  page. The 160-character description truncation — which applies to authored
+  descriptions, not just derived ones — is now documented too.
+
+### Added
+
+- `test/host-roundtrip.test.ts`, which escapes with the host's real
+  `escapeHtml` and requires the original string back. The apostrophe bug
+  shipped because every existing test fed the decoder a hand-written fixture
+  using the decimal form the host never emits.
+
 ## [0.1.0] - 2026-08-17
 
 ### Added

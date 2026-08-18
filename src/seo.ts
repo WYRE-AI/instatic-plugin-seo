@@ -25,18 +25,63 @@ const MAX_DESCRIPTION_LENGTH = 160
 // ---------------------------------------------------------------------------
 
 /**
- * Decode the small set of named entities the host's own escaping can
- * produce, so a title round-tripped through `<title>` compares and
- * re-escapes correctly. `&amp;` is decoded last to avoid turning
- * `&amp;lt;` into `<`.
+ * The named entities that can appear in host-rendered HTML. A `Map` rather
+ * than an object literal so a name like `constructor` cannot resolve to
+ * something off `Object.prototype`.
+ */
+const NAMED_ENTITIES = new Map<string, string>([
+  ['amp', '&'],
+  ['apos', "'"],
+  ['gt', '>'],
+  ['lt', '<'],
+  ['quot', '"'],
+])
+
+/** Matches one named, decimal, or hexadecimal character reference. */
+const ENTITY_PATTERN = /&(?:#[xX]([0-9a-fA-F]+)|#([0-9]+)|([a-zA-Z][a-zA-Z0-9]*));/g
+
+/** Highest code point Unicode defines; `String.fromCodePoint` throws above it. */
+const MAX_CODE_POINT = 0x10ffff
+
+/**
+ * Decode the HTML entities the host's own escaping can produce, so a value
+ * round-tripped through `<title>` or a `content="…"` attribute compares and
+ * re-escapes correctly.
+ *
+ * Numeric references are decoded **generically** — decimal `&#39;` and
+ * hexadecimal `&#x27;` alike, with or without leading zeros. This matters:
+ * the host's `escapeHtml` (`src/core/html-sanitize/index.ts`) spells `'` as
+ * the hex `&#x27;`, so a decoder that knew only the decimal form left every
+ * apostrophe encoded and then re-escaped the stray `&`, publishing
+ * `Ada&amp;#x27;s` where the page said `Ada's`. Decoding the whole numeric
+ * family means the next character the host adds to its escape map cannot
+ * reproduce that bug.
+ *
+ * The scan is a SINGLE pass over one alternation, not a chain of
+ * `.replace()` calls. `String.prototype.replace` never re-examines what it
+ * just wrote, so `&amp;lt;` decodes to the literal text `&lt;` and stops —
+ * a chain would carry on and decode it the rest of the way to `<`, quietly
+ * un-escaping markup that the author had typed as visible text.
+ *
+ * Anything that is not a reference we recognise is left exactly as written:
+ * an unknown name, a code point past the end of Unicode, or a lone
+ * surrogate that would produce an unpaired UTF-16 unit.
  */
 export function decodeHtmlEntities(value: string): string {
-  return String(value)
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&amp;/g, '&')
+  return String(value).replace(
+    ENTITY_PATTERN,
+    (match: string, hex?: string, decimal?: string, name?: string) => {
+      if (name !== undefined) return NAMED_ENTITIES.get(name) ?? match
+
+      const digits = hex ?? decimal
+      if (digits === undefined) return match
+      const codePoint = Number.parseInt(digits, hex !== undefined ? 16 : 10)
+
+      if (!Number.isFinite(codePoint) || codePoint > MAX_CODE_POINT) return match
+      if (codePoint >= 0xd800 && codePoint <= 0xdfff) return match
+      return String.fromCodePoint(codePoint)
+    },
+  )
 }
 
 /**
@@ -286,9 +331,13 @@ export function buildOrganizationJsonLd(
 /**
  * Render the complete block of tags this plugin owns.
  *
- * Returns an empty string when there is nothing worth emitting, so a page
- * with no metadata and no site settings stays byte-identical to what the
- * host produced.
+ * Returns an empty string when nothing resolves, which leaves the page
+ * byte-identical to what the host produced. Note that "no metadata
+ * authored" is NOT that case: `og:title` and `twitter:title` fall back to
+ * the `<title>` the host already rendered, and every page has one, so a
+ * page with nothing authored still gets a four-tag block. Emitting an
+ * `og:title` derived from the page title is the point — the empty return
+ * is for documents with no title and no description at all.
  */
 export function buildSeoHead(input: SeoBuildInput): string {
   const values = resolveSeoValues(input)
@@ -397,8 +446,11 @@ export function injectSeoHead(html: string, block: string): string {
   const emitsDescription = /<meta name="description"/.test(block)
   const base = emitsDescription ? stripHostDescription(withoutPrevious) : withoutPrevious
 
+  // Returning `base` here would strip the host's description and then fail to
+  // emit a replacement, leaving the page with no description at all. Back out
+  // to the pre-strip document instead.
   const headCloseIndex = base.search(/<\/head\s*>/i)
-  if (headCloseIndex === -1) return base
+  if (headCloseIndex === -1) return withoutPrevious
 
   // Normalise the whitespace immediately before `</head>` so the result
   // does not drift between runs. Without this, stripping a previous

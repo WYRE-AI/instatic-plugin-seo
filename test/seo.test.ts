@@ -252,6 +252,15 @@ describe('injectSeoHead', () => {
     const fragment = '<div>no head here</div>'
     expect(injectSeoHead(fragment, '<!-- instatic-plugin-seo:start -->\n<meta name="x" content="y">\n<!-- instatic-plugin-seo:end -->')).toBe(fragment)
   })
+
+  it('does not strip the host description when it cannot insert a replacement', () => {
+    // No `</head>`, so nothing is inserted. Removing the host's description
+    // anyway would leave the page with no description at all.
+    const fragment = '<meta name="description" content="Site wide"><div>no head</div>'
+    const block =
+      '<!-- instatic-plugin-seo:start -->\n<meta name="description" content="Per page">\n<!-- instatic-plugin-seo:end -->'
+    expect(injectSeoHead(fragment, block)).toBe(fragment)
+  })
 })
 
 describe('applySeoToHtml', () => {
@@ -282,6 +291,23 @@ describe('applySeoToHtml', () => {
   it('leaves the document untouched when there is nothing to add', () => {
     const bare = '<html><head><title></title></head><body></body></html>'
     expect(applySeoToHtml(bare, { record: null, settings: {}, slug: '' })).toBe(bare)
+  })
+
+  it('still emits title tags for a page with no metadata and no settings', () => {
+    // Pinning the real behaviour: "nothing authored" is not a no-op. The
+    // title fallback fires on every page that has a <title>, which is every
+    // page — deriving og:title from it is the point of the fallback chain.
+    const bare = '<html><head><title>Plain Title</title></head><body></body></html>'
+    const output = applySeoToHtml(bare, { record: null, settings: {}, slug: '' })
+
+    expect(output).not.toBe(bare)
+    expect(output).toContain('<meta property="og:title" content="Plain Title">')
+    expect(output).toContain('<meta name="twitter:title" content="Plain Title">')
+    // Nothing resolved a description, a canonical, or an image, so those
+    // tags stay omitted rather than being emitted empty.
+    expect(output).not.toContain('name="description"')
+    expect(output).not.toContain('rel="canonical"')
+    expect(output).not.toContain('og:image')
   })
 
   it('preserves the rest of the document byte-for-byte', () => {

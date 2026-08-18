@@ -37,9 +37,40 @@ For each published page, as available:
 | `<script type="application/ld+json">` | `Article` / `BlogPosting` per page, optional site-wide `Organization` |
 | `<meta name="robots" content="noindex, nofollow">` | Per-page toggle |
 
-Blank fields **fall back rather than emit empty tags**. If nothing resolves, the tag is
-omitted entirely — a page with no metadata and no site settings is left byte-identical to
-what the host produced.
+Blank fields **fall back rather than emit empty tags**. If nothing resolves for a given
+tag, that tag is omitted entirely rather than emitted empty.
+
+### It is not a no-op on pages with no metadata
+
+`og:title` and `twitter:title` fall back to the `<title>` the host already rendered, and
+every published page has one. So a page with **nothing authored and no site settings**
+still gets a four-tag block:
+
+```html
+<!-- instatic-plugin-seo:start -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="Plain Title">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="Plain Title">
+<!-- instatic-plugin-seo:end -->
+```
+
+That is the intended behaviour — a page sharing with no `og:title` is the problem this
+plugin exists to fix, and the page title is the best available answer. But it does mean
+**installing this plugin changes every page on the site**, not only the pages you author
+metadata for. The output is byte-identical to the input only when nothing resolves at all:
+a document with no `<title>` (or an empty one), no site-wide description, and no authored
+record. Re-running the filter over already-published HTML *is* byte-identical, because the
+marked block is stripped and rebuilt.
+
+### Descriptions are truncated to 160 characters
+
+`<meta name="description">`, `og:description`, `twitter:description`, and the JSON-LD
+`description` are all clipped to 160 characters on a word boundary with a trailing `…`.
+This applies to **authored** descriptions too, not just ones derived from page content —
+write a 200-character description and 160 characters are what get published. 160 is close
+to what search results display; if you need the full text in `og:description`, this is the
+line to change (`MAX_DESCRIPTION_LENGTH` in `src/seo.ts`).
 
 ## Requirements
 
@@ -244,6 +275,14 @@ decorative.
 - Every interpolated value passes through `escapeHtmlAttribute`, which escapes `&`, `<`,
   `>`, `"`, and `'` — ampersand first, so later replacements are not double-encoded. An
   unescaped quote in a page title would otherwise break out of a `content="…"` attribute.
+- Values read back out of the rendered page are decoded by `decodeHtmlEntities` before
+  being re-escaped. It decodes numeric references **generically** — decimal `&#39;` and
+  hexadecimal `&#x27;` alike — because the host spells `'` as the hex form, and it does so
+  in a **single pass** over one alternation so `&amp;lt;` decodes to the visible text
+  `&lt;` and stops rather than being carried the rest of the way to `<`. Unknown names,
+  code points past the end of Unicode, and lone surrogates are left as written.
+  `test/host-roundtrip.test.ts` asserts this against the host's own `escapeHtml` rather
+  than a hand-written fixture — a fixture is what let an over-encoding bug ship.
 - JSON-LD is serialised with `<`, `>`, and `&` escaped as `\uXXXX`. `JSON.stringify` alone
   is **not** sufficient: inside a script element the HTML tokeniser scans for the literal
   `</script` sequence regardless of JSON syntax, so a `</script>` in author text would
